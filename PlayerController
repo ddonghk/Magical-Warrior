@@ -1,0 +1,173 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.AI; // 네비게이션 사용하기 위해
+using UnityEngine.UI;
+using UnityEngine.SceneManagement;
+
+public class PlayerController : MonoBehaviour
+{
+    private Camera camera; // 클릭한 순간 마우스 가져오기, 스크린 좌표상에 있는 마우스 위치 -> 월드 위치 좌표로 바꾸기
+    private Animator animator;
+    private NavMeshAgent agent;
+
+    private bool isMove; // 캐릭터가 움직이는지 판단할 함수
+    private Vector3 destination; // 캐릭터가 이동해야할 목적지
+
+    public GameObject FirePrefab;
+    public GameObject skill1;
+
+    public bool isDelay;
+    float delayTime = 0.4f;
+    float timer = 0f;
+
+    public bool isDelay1;
+    float delayTime1 = 2f;
+    float timer1 = 0f;
+
+    public Slider HpBar;
+    public float Damage;
+
+    public AudioClip Attack;
+    public AudioClip Attack2;
+    AudioSource audioSource;
+
+    void PlaySound(string action)
+    {
+        switch (action)
+        {
+            case "Attackk":
+                audioSource.clip = Attack;
+                break;
+            case "Attackkk":
+                audioSource.clip = Attack2;
+                break;
+        }
+        audioSource.Play();
+    }
+    void Fire()
+    {
+        if (Input.GetMouseButtonDown(0))
+        {
+            if (!isDelay)
+            {
+                isDelay = true;
+                animator.SetTrigger("Attack");
+                Vector3 firePos = transform.position + animator.transform.forward + new Vector3(0f, 20f, 0f); // 총알 생성 위치 캐릭터 조금 앞
+                var bullet = Instantiate(FirePrefab, transform.position, Quaternion.identity).GetComponent<Fire>();
+                bullet._Fire(animator.transform.forward); // 캐릭터가 바라보는 방향으로 발사
+                PlaySound("Attackk");
+
+            }
+        }
+
+        if(isDelay)
+        {
+            timer += Time.deltaTime;
+            if (timer > delayTime)
+            {
+                timer = 0f;
+                isDelay = false;
+            }
+        }
+    }
+
+    void Skill()
+    {
+        if(Input.GetKeyDown(KeyCode.Q))
+        {
+            if (!isDelay1)
+            {
+                isDelay1 = true;
+                animator.SetTrigger("Skill");
+                Vector3 firePos = transform.position + animator.transform.forward + new Vector3(0f, 20f, 0f); // 총알 생성 위치 캐릭터 조금 앞
+                var Skill1 = Instantiate(skill1, transform.position, Quaternion.identity).GetComponent<Skill1>();
+                Skill1._Skill1(animator.transform.forward); // 캐릭터가 바라보는 방향으로 발사
+                PlaySound("Attackkk");
+            }
+        }
+        if (isDelay1)
+        {
+            timer1 += Time.deltaTime;
+            if (timer1 > delayTime1)
+            {
+                timer1 = 0f;
+                isDelay1 = false;
+            }
+        }
+    }
+
+    private void Awake()
+    {
+        camera = Camera.main; // 메인 카메라 가져오기
+        animator = GetComponentInChildren<Animator>(); // Player객체에 Animator가 있으니 Children으로 자식들에 접근
+        agent = GetComponent<NavMeshAgent>();
+        agent.enabled = false;
+        agent.updateRotation = false; // agent가 캐릭터를 회전시키지 않도록
+        this.audioSource = GetComponent<AudioSource>();
+    }
+    void Start()
+    {
+        agent.enabled = true;
+    }
+
+    void Update()
+    {
+        if (Input.GetMouseButton(1)) // 마우스 오른쪽 버튼 클릭했을 때 마우스 커서 위치 찾아내기
+        {
+            RaycastHit hit;
+            if(Physics.Raycast(camera.ScreenPointToRay(Input.mousePosition), out hit))
+            {
+                SetDestination(hit.point); // 찾아낸 좌표 SetDestination에 넣어주기
+            }
+        }
+        LookMoveDirection();
+        Fire();
+        Skill();
+        Die();
+    }
+
+    private void Die()
+    {
+        if(HpBar.value <= 0)
+        {
+            animator.SetTrigger("Die");
+            if (Input.GetKeyDown(KeyCode.R))
+            {
+                SceneManager.LoadScene("SampleScene");
+            }
+        }
+    }
+    private void SetDestination(Vector3 dest) 
+    {
+        agent.SetDestination(dest); // 매개변수로 가져온 목표위치(dest)를 안에 넣어주기. 자동으로 길 찾아서 이동하도록.
+        // destination = dest; // 매개변수로 가져온 dest를 destination 안에 넣어주기
+        isMove = true;
+        animator.SetBool("isMove", true); 
+    }
+
+    private void LookMoveDirection() // 캐릭터를 목적지까지 이동시키는 함수 (agent 때문에 transform.position 필요없어짐)
+    {
+        if (isMove) // isMove가 true일 때
+        {
+            if (agent.velocity.magnitude == 0f) // agent 속도로 지정하여 목표에 도달시 함수 종료
+            {
+                isMove = false; // isMove false로 바꿔주고
+                animator.SetBool("isMove", false); // 이동 애니메이션 그만
+                return;
+            }
+
+            var dir = new Vector3(agent.steeringTarget.x, agent.steeringTarget.y, agent.steeringTarget.z) - transform.position; 
+            // 이동할 방향 찾기
+            // 캐릭터가 목적지만 바로보지않고 자신이 이동하는 방향 쳐다보게 destination 대신 agent.steeringTarget 사용
+            // 높이 다른 곳 안올라가게 높이는 캐릭터 자신 높이 바라보게 Vector3 선언
+
+            animator.transform.forward = dir; // 플레이어가 이동하는 방향인 dir을 플레이어 forward에 넣어주기 (이동 방향 바라보게하기)
+            // Play가 아닌 Player 회전시켜야해서 앞에 animator 붙이기
+
+            // transform.position += dir.normalized * Time.deltaTime * 5f; // 찾아낸 이동 방향을 transform.position에 더해서 캐릭터 이동
+            // 클릭한 위치와 캐릭터 위치가 멀수록 이동속도가 빨라지는 문제가 발생하니 normalized 시켜서 방향값을 1로 만들어줘야함.
+            // Time.deltaTime곱해서 게임 프레임속도에 영향 안받게하기
+        }
+    }
+}
